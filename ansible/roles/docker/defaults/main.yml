@@ -1,3 +1,32 @@
 #SPDX-License-Identifier: MIT-0
 ---
 # defaults file for roles/docker
+docker_repo_url: "https://download.docker.com/linux/rhel/docker-ce.repo"
+docker_gpg_key_url: "https://download.docker.com/linux/rhel/gpg"
+docker_key_id: "060A 61C5 1B55 8A7F 742B 77AA C52F EB6B 621E 9F35"
+
+docker_conflicting_packages:
+  - podman
+  - runc
+  - docker
+  - docker-client
+  - docker-client-latest
+  - docker-common
+  - docker-latest
+  - docker-latest-logrotate
+  - docker-logrotate
+  - docker-engine
+
+docker_packages:
+  - dnf-plugins-core
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+  
+# Since RHEL 10
+docker_kernel_modules:
+  - xt_addrtype
+  - br_netfilter
+  
