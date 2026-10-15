@@ -1,0 +1,14 @@
+#cloud-config
+# Runs once at first boot of a new VM.
+# Creates the 'ansible' user: SSH-key login only, passwordless sudo.
+users:
+  - default
+  - name: ansible
+    gecos: Ansible automation user
+    groups: wheel
+    shell: /bin/bash
+    lock_passwd: true
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKYbTxoCH4H9AU3icxaHW6UZpXK9k6iS5Mgz+uCC+Ve mattis.callens@student.odisee.be
+ssh_pwauth: false
