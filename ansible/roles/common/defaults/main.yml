@@ -1,3 +1,11 @@
 #SPDX-License-Identifier: MIT-0
 ---
 # defaults file for roles/common
+common_timezone: "Europe/Brussels"
+common_packages:
+  - vim
+  - git
+  - curl
+  - wget
+  - firewalld
+  - policycoreutils-python-utils
