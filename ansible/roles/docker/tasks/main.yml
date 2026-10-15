@@ -1,0 +1,64 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for roles/docker
+- name: Delete conflicting packages
+  ansible.builtin.dnf:
+    name: "{{ docker_conflicting_packages }}"
+    state: removed
+
+- name: Install extra kernel modules
+  ansible.builtin.dnf:
+    name: kernel-modules-extra
+    state: present
+
+- name: Check if the running kernel has the Docker modules
+  ansible.builtin.find:
+    paths: "/lib/modules/{{ ansible_facts['kernel'] }}"
+    patterns: "xt_addrtype.ko*"
+    recurse: true
+  register: docker_addrtype_module
+
+- name: Reboot into the kernel that matches the installed modules
+  ansible.builtin.reboot:
+    msg: "Rebooting: kernel-modules-extra requires the newer kernel"
+  when: docker_addrtype_module.matched == 0
+
+- name: Load Docker kernel modules at boot
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/docker.conf
+    content: "{{ docker_kernel_modules | join('\n') }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Load Docker kernel modules now
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ docker_kernel_modules }}"
+  
+
+- name: Import docker GPG key
+  ansible.builtin.rpm_key:
+    state: present
+    key: "{{ docker_gpg_key_url }}"
+    fingerprint: "{{ docker_key_id }}"
+
+- name: Add docker official repository
+  ansible.builtin.get_url:
+    url: "{{ docker_repo_url }}"
+    dest: /etc/yum.repos.d/docker-ce.repo
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install required packages
+  ansible.builtin.dnf:
+    name: "{{ docker_packages }}"
+    state: present
+
+- name: Enable and start docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started

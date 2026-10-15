@@ -1,0 +1,7 @@
+---
+- name: Configure OME nodes
+  hosts: ome_nodes
+  become: true
+  roles:
+    - common
+    - docker
