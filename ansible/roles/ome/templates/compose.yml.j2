@@ -4,10 +4,12 @@
 # Differences with upstream docker-compose.yml:
 # - API and frontend come from GHCR instead of being built here.
 # - No source code mounted as volumes: the server runs what is in the images.
-# - The real API config is mounted over /app/.env (secrets never in images).
-# - FastAPI runs with `fastapi run` (production mode) on port 5001, the port
+# - The real config.json (rendered by Ansible from the vault) is mounted as the
+#   `ome_config` secret at /run/secrets/ome_config, so no credentials are in images.
+# - FastAPI runs with `fastapi run` (production mode) on port 8000, the port
 #   the frontend's nginx proxies /api/ to.
 # - NNTP is not published on the host.
+# - Watchtower updates the API and frontend when a new image is published.
 # - Watchtower updates the API and frontend when a new image is published.
 
 name: ome
@@ -20,6 +22,8 @@ services:
       dockerfile: Dockerfile-nntp
     pull_policy: build
     hostname: nntp-server
+    secrets:
+      - ome_config
     restart: unless-stopped
     networks:
       ome_net:
@@ -32,8 +36,10 @@ services:
     hostname: fastapi-server
     restart: unless-stopped
     command: ["uv", "run", "--env-file=.env", "fastapi", "run", "--host=0.0.0.0", "--port=8000", "server/main.py"]
-    volumes:
-      - {{ ome_base_dir }}/api.env:/app/.env:ro
+    environment:
+      INN_SERVER_NAME: nntp-server
+    secrets:
+      - ome_config
     labels:
       com.centurylinklabs.watchtower.enable: "true"
     depends_on:
@@ -64,6 +70,10 @@ services:
     command: ["--label-enable", "--cleanup", "--interval", "{{ ome_watchtower_interval }}"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+  
+secrets:
+  ome_config:
+    file: {{ ome_src_dir }}/config.json 
 
 networks:
   ome_net:

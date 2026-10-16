@@ -77,8 +77,9 @@
     # frontend are pulled when missing. Watchtower handles later updates.
     pull: policy
     # The API reads its .env only at start: recreate it when the file changed.
-    recreate: "{{ 'always' if ome_api_env.changed else 'auto' }}"
+    recreate: "{{ 'always' if (ome_api_env.changed or ome_nntp_config.changed) else 'auto' }}"
     remove_orphans: true
+
   register: ome_stack
 
 - name: Pre-seed newsgroups from the configured peers
