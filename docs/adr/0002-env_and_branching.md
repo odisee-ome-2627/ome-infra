@@ -20,11 +20,11 @@ production, without untested code reaching production.
 
 Enforced with GitHub rulesets (no bypass list):
 
-- `main`: PR required, 1 approval, approval of the most recent push by someone else,
+- `main`: PR required, 2 approvals, approval of the most recent push by someone else,
   conversations resolved, required checks (`inn-docker_uv (cclauss/inn)`, `shellcheck`,
   `front-end (18.19.0)`, `build_docs`), no force push, no deletion.
   Merge methods: merge commit (needed for upstream syncs) and squash.
-- `staging`, `production`: PR required, 1 approval, merge commit only, no force push,
+- `staging`, `production`: PR required, 2 approvals, merge commit only, no force push,
   no deletion, required check `check-source-branch`.
 
 The `promotion-guard` workflow provides `check-source-branch`: it fails unless the PR is
