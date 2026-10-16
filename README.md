@@ -42,4 +42,4 @@ ansible-playbook -i inventories/staging playbooks/site.yml    # configure stagin
 
 Running the playbook a second time must report `changed=0`.
 
-See [`docs/runbook.md`](docs/runbook.md) for everything else.
+See [`docs/runbook.md`](./docs/runbook.md) for everything else.
