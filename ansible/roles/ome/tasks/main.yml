@@ -1,3 +1,115 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# tasks file for roles/ome
+- name: Check that the environment and its secrets are defined
+  ansible.builtin.assert:
+    that:
+      - ome_env in ome_branch_map
+      - vault_ome_nntp_user_password is defined
+      - vault_ome_nntp_debug_password is defined
+    fail_msg: >-
+      Set ome_env in inventories/<env>/group_vars/all/vars.yml and create the
+      encrypted vault.yml for this environment (see docs/runbook.md).
+    quiet: true
+
+- name: Create the application directory
+  ansible.builtin.file:
+    path: "{{ ome_base_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Check out the fork on the branch of this environment
+  # Needed to build the NNTP image on the server.
+  ansible.builtin.git:
+    repo: "{{ ome_repo_url }}"
+    dest: "{{ ome_src_dir }}"
+    version: "{{ ome_branch }}"
+    force: false
+  register: ome_src
+
+- name: Render config.json for the NNTP image build
+  ansible.builtin.template:
+    src: config.json.j2
+    dest: "{{ ome_src_dir }}/config.json"
+    owner: root
+    group: root
+    mode: "0600"
+  register: ome_nntp_config
+
+- name: Render the API environment file
+  # Mounted over /app/.env in the API container. The image itself only
+  # contains the values from config.json.example.
+  ansible.builtin.template:
+    src: api.env.j2
+    dest: "{{ ome_base_dir }}/api.env"
+    owner: root
+    group: root
+    mode: "0600"
+  register: ome_api_env
+
+- name: Render the compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ ome_base_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  register: ome_compose
+
+- name: Allow the frontend port through the firewall
+  # Docker publishes ports itself (bypassing firewalld); this rule documents
+  # the intent and keeps the port open if Docker's behaviour changes.
+  ansible.posix.firewalld:
+    port: "{{ ome_frontend_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Start the OME stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ ome_base_dir }}"
+    files:
+      - compose.yml
+    state: present
+    # Rebuild the NNTP image only when its source or config changed.
+    build: "{{ 'always' if (ome_src.changed or ome_nntp_config.changed) else 'policy' }}"
+    # Each service's pull_policy decides: NNTP is built here, API and
+    # frontend are pulled when missing. Watchtower handles later updates.
+    pull: policy
+    # The API reads its .env only at start: recreate it when the file changed.
+    recreate: "{{ 'always' if ome_api_env.changed else 'auto' }}"
+    remove_orphans: true
+  register: ome_stack
+
+- name: Pre-seed newsgroups from the configured peers
+  # Same as upstream's post_start hook. Only useful when peers are set.
+  ansible.builtin.command:
+    cmd: >-
+      docker compose -f {{ ome_base_dir }}/compose.yml exec -T nntp-server
+      sh -c "/usr/local/bin/wait_for_tcp.sh 119 20 && /usr/local/bin/preseed.sh"
+  when:
+    - ome_nntp_peers | length > 0
+    - ome_src.changed or ome_nntp_config.changed
+  register: ome_preseed
+  changed_when: ome_preseed.rc == 0
+  failed_when: false
+
+- name: Wait until the frontend answers
+  ansible.builtin.uri:
+    url: "http://localhost:{{ ome_frontend_port }}/imls/"
+    status_code: 200
+  register: ome_frontend_check
+  until: ome_frontend_check.status == 200
+  retries: 12
+  delay: 5
+
+- name: Wait until nginx can reach the API
+  # 502/504 means nginx cannot reach FastAPI. Any other answer means the
+  # request arrived at FastAPI (a 404 for /api/ itself is fine).
+  ansible.builtin.uri:
+    url: "http://localhost:{{ ome_frontend_port }}/api/"
+    status_code: [200, 307, 404, 405, 422]
+  register: ome_api_check
+  until: ome_api_check.status not in [502, 503, 504, -1]
+  retries: 12
+  delay: 5
