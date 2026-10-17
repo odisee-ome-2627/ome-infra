@@ -1,3 +1,58 @@
-#SPDX-License-Identifier: MIT-0
 ---
-# defaults file for roles/ome
+# Defaults for the `ome` role.
+# Only `ome_env` (in inventories/<env>/group_vars/all/vars.yml) and the
+# secrets (in inventories/<env>/group_vars/all/vault.yml) differ per environment.
+
+# --- Environment ---
+# Which branch of the fork each environment follows.
+ome_branch_map:
+  dev: main
+  staging: staging
+  production: production
+ome_branch: "{{ ome_branch_map[ome_env] }}" # Search for the right branch in the map above.
+
+# Image tag (same as the branch name)
+ome_image_tag: "{{ ome_env }}"
+
+# --- Locations on the server ---
+ome_base_dir: /opt/ome
+ome_src_dir: "{{ ome_base_dir }}/src"
+
+# --- Source and images ---
+ome_repo_url: https://github.com/odisee-ome-2627/Open-Metadata-Exchange.git
+ome_registry: ghcr.io/odisee-ome-2627
+ome_api_image: "{{ ome_registry }}/ome-api:{{ ome_image_tag }}"
+ome_frontend_image: "{{ ome_registry }}/ome-frontend:{{ ome_image_tag }}"
+# The NNTP image is built on the server (it contains environment-specific
+# config and secrets, so it is never pushed to a registry).
+ome_nntp_image: "ome-nntp:{{ ome_image_tag }}"
+
+# --- Network ---
+# Only the frontend (nginx) is published. nginx proxies /api/ to FastAPI
+# inside the Docker network. NNTP is never published.
+ome_frontend_port: 80
+
+# The intern Docker network. Taken this over from ISKME
+ome_network_subnet: 172.21.0.0/24
+ome_network_gateway: 172.21.0.1
+
+# --- Application config (rendered into config.json and the API .env) ---
+ome_organization: "Odisee OME team ({{ ome_env }})"
+ome_hostname: "{{ inventory_hostname }}"
+ome_cms_plugin: server.plugins.qubes.plugin.QubesPlugin
+
+# NNTP peers. Empty = this node does not exchange metadata with other nodes.
+# Multi-node peering is a later story (see docs/runbook.md).
+ome_nntp_peers: []
+
+ome_nntp_user: ome
+ome_nntp_debug_user: debugreader
+# Secrets come from the encrypted vault.yml of each environment.
+ome_nntp_user_password: "{{ vault_ome_nntp_user_password }}"
+ome_nntp_debug_password: "{{ vault_ome_nntp_debug_password }}"
+
+# --- Watchtower ---
+# Maintained fork of containrrr/watchtower (archived December 2025).
+# Pinned version: update deliberately, never `latest`.
+ome_watchtower_image: nickfedor/watchtower:1.19.0
+ome_watchtower_interval: 300  # seconds between checks for new images

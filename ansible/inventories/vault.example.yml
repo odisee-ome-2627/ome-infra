@@ -1,0 +1,6 @@
+---
+# Example of inventories/<env>/group_vars/all/vault.yml BEFORE encryption.
+# Never commit the real file unencrypted vault-files. See docs/runbook.md, "Secrets".
+#
+vault_ome_nntp_user_password: "CHANGE-ME"
+vault_ome_nntp_debug_password: "CHANGE-ME"

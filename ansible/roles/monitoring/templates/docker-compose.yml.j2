@@ -1,0 +1,21 @@
+# {{ ansible_managed }}
+# Uptime Kuma: availability checks of all environments, reporting to Discord when one stops answering.
+
+name: monitoring
+
+services:
+  uptime-kuma:
+    image: {{ monitoring_uptime_kuma_image }}
+    restart: unless-stopped
+    ports:
+      - "{{ monitoring_port }}:3001"
+    volumes:
+      - uptime-kuma-data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  uptime-kuma-data:
