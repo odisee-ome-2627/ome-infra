@@ -71,7 +71,7 @@
     # Each service's pull_policy decides: NNTP is built here, API and
     # frontend are pulled when missing. Watchtower handles later updates.
     pull: policy
-    # The API reads its .env only at start: recreate it when the file changed.
+    # API and NNTP read config.json only at start (recreate them when changed)
     recreate: "{{ 'always' if (ome_nntp_config.changed) else 'auto' }}"
     remove_orphans: true
 
