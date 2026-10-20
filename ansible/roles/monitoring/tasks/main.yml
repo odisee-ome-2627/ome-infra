@@ -17,7 +17,7 @@
     group: root
     mode: '0644'
 
-- name: Allow the Uptime Kuma port trough the firewall
+- name: Allow the Uptime Kuma port through the firewall
   ansible.posix.firewalld:
     port: "{{ monitoring_port }}/tcp"
     permanent: true
