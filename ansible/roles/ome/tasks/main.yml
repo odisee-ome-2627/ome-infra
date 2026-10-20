@@ -67,7 +67,7 @@
       - compose.yml
     state: present
     # Rebuild the NNTP image only when its source or config changed.
-    build: "{{ 'always' if (ome_src.changed or ome_nntp_config.changed) else 'policy' }}"
+    build: policy
     # Each service's pull_policy decides: NNTP is built here, API and
     # frontend are pulled when missing. Watchtower handles later updates.
     pull: policy
