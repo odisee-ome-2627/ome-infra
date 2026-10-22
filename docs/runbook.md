@@ -12,7 +12,15 @@ ansible-galaxy collection install -r requirements.yml
 
 - `~/.ssh/config`: `Host 10.129.80.*` with `User ansible`, `IdentityFile ~/.ssh/<your-key>`, `IdentitiesOnly yes`
 - Your public key on the servers: #63
-- Vault password from the team password manager (#99) in `~/.ansible/ome-vault-password` (`chmod 600`)
+- Vault password from the team password manager (#99), stored in a plain text file:
+
+```bash
+  mkdir -p ~/.ansible
+  nano ~/.ansible/ome-vault-password   # paste only the password, on one line
+  chmod 600 ~/.ansible/ome-vault-password
+```
+
+  The path is set in `ansible.cfg`. Another path works with `--vault-password-file <path>`.
 - Keep the repo in your WSL home, not on `/mnt/c` (Ansible ignores `ansible.cfg` there)
 
 ## 2. Add a server
