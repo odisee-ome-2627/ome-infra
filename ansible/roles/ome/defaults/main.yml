@@ -11,7 +11,7 @@ ome_branch_map:
   production: production
 ome_branch: "{{ ome_branch_map[ome_env] }}" # Search for the right branch in the map above.
 
-# Image tag (same as the branch name)
+# Image tag = environment name (not the brnach name) 
 ome_image_tag: "{{ ome_env }}"
 
 # --- Locations on the server ---
