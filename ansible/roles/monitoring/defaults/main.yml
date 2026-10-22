@@ -1,0 +1,7 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for the monitoring role: Uptime Kuma, checks every environment
+# and report to Discord when one stops answering.
+monitoring_base_dir: /opt/monitoring
+monitoring_uptime_kuma_image: louislam/uptime-kuma:2.5.6
+monitoring_port: 3001

@@ -5,3 +5,7 @@
   roles:
     - common
     - docker
+    - ome
+  
+- name: Configure monitoring
+  ansible.builtin.import_playbook: monitoring.yml

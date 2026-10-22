@@ -1,0 +1,14 @@
+{{ {
+  "organization": ome_organization,
+  "hostname": ome_hostname,
+  "peers": ome_nntp_peers,
+  "nntp_user": {
+    "username": ome_nntp_user,
+    "password": ome_nntp_user_password
+  },
+  "nntp_debug_user": {
+    "username": ome_nntp_debug_user,
+    "password": ome_nntp_debug_password
+  },
+  "cms_plugin": ome_cms_plugin
+} | to_nice_json(indent=4) }}
