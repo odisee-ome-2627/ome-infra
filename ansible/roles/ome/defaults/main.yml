@@ -23,8 +23,8 @@ ome_repo_url: https://github.com/odisee-ome-2627/Open-Metadata-Exchange.git
 ome_registry: ghcr.io/odisee-ome-2627
 ome_api_image: "{{ ome_registry }}/ome-api:{{ ome_image_tag }}"
 ome_frontend_image: "{{ ome_registry }}/ome-frontend:{{ ome_image_tag }}"
-# The NNTP image is built on the server (it contains environment-specific
-# config and secrets, so it is never pushed to a registry).
+# The NNTP image is built on the server from the fork checkout. 
+# It contains no secrets (config comes from the ome_config secret at runtime).
 ome_nntp_image: "ome-nntp:{{ ome_image_tag }}"
 
 # --- Network ---

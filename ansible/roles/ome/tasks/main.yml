@@ -27,7 +27,7 @@
     force: false
   register: ome_src
 
-- name: Render config.json for the NNTP image build
+- name: Render config.json (mounted as the ome_config secret)
   ansible.builtin.template:
     src: config.json.j2
     dest: "{{ ome_src_dir }}/config.json"
@@ -36,16 +36,11 @@
     mode: "0600"
   register: ome_nntp_config
 
-- name: Render the API environment file
-  # Mounted over /app/.env in the API container. The image itself only
-  # contains the values from config.json.example.
-  ansible.builtin.template:
-    src: api.env.j2
-    dest: "{{ ome_base_dir }}/api.env"
-    owner: root
-    group: root
-    mode: "0600"
-  register: ome_api_env
+- name: Remove the old API environment file
+  # Remove the unused API.env file; the API reads config.json
+  ansible.builtin.file:
+    path: "{{ ome_base_dir }}/api.env"
+    state: absent
 
 - name: Render the compose file
   ansible.builtin.template:
@@ -72,12 +67,12 @@
       - compose.yml
     state: present
     # Rebuild the NNTP image only when its source or config changed.
-    build: "{{ 'always' if (ome_src.changed or ome_nntp_config.changed) else 'policy' }}"
+    build: policy
     # Each service's pull_policy decides: NNTP is built here, API and
     # frontend are pulled when missing. Watchtower handles later updates.
     pull: policy
-    # The API reads its .env only at start: recreate it when the file changed.
-    recreate: "{{ 'always' if (ome_api_env.changed or ome_nntp_config.changed) else 'auto' }}"
+    # API and NNTP read config.json only at start (recreate them when changed)
+    recreate: "{{ 'always' if (ome_nntp_config.changed) else 'auto' }}"
     remove_orphans: true
 
   register: ome_stack
