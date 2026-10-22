@@ -79,7 +79,7 @@ Limitation: monitors live in Uptime Kuma's database, not in Git.
 
 On 16-10-2026 the API on dev stopped after a merge on `main` (fork PR #80). Uptime Kuma
 reported `dev-api went down` (502) in Discord within a minute; staging and production were
-not affected. See [`incidents/2026-10-16-config-secret.md`](./incidents/2026-10-16-config-secret.md).
+not affected. See [`incidents/16-10-2026-config-secret.md`](./incidents/16-10-2026_config-secret.md).
 
 ## Watchtower (deployments)
 

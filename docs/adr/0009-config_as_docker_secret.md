@@ -16,7 +16,7 @@ with `config.json.example` and `api.env` was mounted over `/app/.env`; the NNTP 
 built on the server with the real `config.json` inside.
 
 On 16-10-2026 the new images reached dev before the infrastructure followed, and the API
-kept restarting (see `docs/incidents/2026-10-16-config-secret.md`).
+kept restarting (see `docs/incidents/16-10-2026_config-secret.md`).
 
 ## Decision
 
