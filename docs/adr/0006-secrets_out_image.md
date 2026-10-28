@@ -1,6 +1,6 @@
 # ADR 0006 – Secrets stay out of published images
 
-- Status: Accepted
+- Status: Superseded by [ADR 0009](./0009-config_as_docker_secret.md)  (17-10-2026) 
 - Date: 15-10-2026
 - Deciders: infra team
 
