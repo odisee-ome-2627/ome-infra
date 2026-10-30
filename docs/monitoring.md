@@ -50,6 +50,8 @@ flowchart LR
 | staging – API | HTTP | `http://10.129.80.47/api/list` | 200 |
 | production – frontend | HTTP | `http://10.129.80.54/imls/` | 200 |
 | production – API | HTTP | `http://10.129.80.54/api/list` | 200 |
+| staging-2 – frontend | HTTP | `http://10.129.80.64/imls/` | 200 |
+| staging-2 – API | HTTP | `http://10.129.80.64/api/list` | 200 |
 
 The API check uses `/api/list`: it returns the newsgroups from the NNTP server, so one
 check proves the whole chain nginx → FastAPI → NNTP works. A 502 means the API is down;
