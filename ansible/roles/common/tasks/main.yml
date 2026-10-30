@@ -16,6 +16,15 @@
     state: started
     enabled: true
 
+- name: Wait until firewall is started
+  ansible.builtin.command:
+    cmd : firewall-cmd --state
+  register: common_firewall_state
+  until: common_firewall_state.rc == 0
+  retries: 10
+  delay: 3
+  changed_when: false
+
 - name: Allow SSH through the firewall
   ansible.posix.firewalld:
     service: ssh
