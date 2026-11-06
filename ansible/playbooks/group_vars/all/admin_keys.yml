@@ -1,0 +1,7 @@
+---
+# Public SSH keys of the team, allowed to log in as `ansible` on every server.
+# Public keys are not secret. Add or remove a key here, then run site.yml
+# on every environment (see docs/runbook.md).
+common_admin_keys:
+  - name: mattis
+    key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKYbTxoCH4H9AU3icxaHW6UZpXK9k6iS5Mgz+uCC+Ve mattis.callens@student.odisee.be"

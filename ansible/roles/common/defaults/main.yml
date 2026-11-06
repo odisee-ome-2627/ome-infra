@@ -9,3 +9,7 @@ common_packages:
   - wget
   - firewalld
   - policycoreutils-python-utils
+
+# Admin access via Ansible user. The real list of keys is in playbooks/group_vars/all/admin_keys.yml.
+common_admin_user: ansible
+common_admin_keys: []
