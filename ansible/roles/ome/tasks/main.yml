@@ -27,6 +27,17 @@
     force: false
   register: ome_src
 
+- name: Build the NNTP peers from the other nodes in the inventory
+  ansible.builtin.set_fact:
+    ome_nntp_peers: "{{ ome_nntp_peers + [ome_peer] }}"
+  vars:
+    ome_peer:
+      name: "{{ hostvars[item]['ome_hostname'] | default(item) }}"
+      dns_name: "{{ hostvars[item]['ansible_host'] }}"
+      port: "{{ ome_nntp_port }}"
+      incoming_ip: "{{ hostvars[item]['ansible_host'] }}"
+  loop: "{{ groups['ome_nodes'] | difference([inventory_hostname]) }}"
+
 - name: Render config.json (mounted as the ome_config secret)
   ansible.builtin.template:
     src: config.json.j2
