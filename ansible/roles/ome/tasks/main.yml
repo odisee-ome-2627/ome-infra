@@ -71,6 +71,34 @@
     immediate: true
     state: enabled
 
+- name: Write the nftables table that limits NNTP to the peers
+  ansible.builtin.template:
+    src: ome-nntp-peers.nft.j2
+    dest: /etc/nftables/ome-nntp-peers.nft
+    owner: root
+    group: root
+    mode: "0644"
+    validate: nft -c -f %s
+  notify: Load the NNTP peer filter
+
+- name: Install the service that loads the NNTP peer filter at boot
+  ansible.builtin.template:
+    src: ome-nntp-firewall.service.j2
+    dest: /etc/systemd/system/ome-nntp-firewall.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable and start the NNTP peer filter
+  ansible.builtin.systemd:
+    name: ome-nntp-firewall
+    enabled: true
+    state: started
+    daemon_reload: true
+    
+- name: Apply the firewall changes before NNTP is published
+  ansible.builtin.meta: flush_handlers
+
 - name: Start the OME stack
   community.docker.docker_compose_v2:
     project_src: "{{ ome_base_dir }}"

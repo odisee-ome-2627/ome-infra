@@ -8,7 +8,7 @@
 #   `ome_config` secret at /run/secrets/ome_config, so no credentials are in images.
 # - FastAPI runs with `fastapi run` (production mode) on port 8000, the port
 #   the frontend's nginx proxies /api/ to.
-# - NNTP is not published on the host.
+# - NNTP is published on the host only when the node has peers (see nntp-server).
 # - Watchtower updates the API and frontend when a new image is published.
 
 name: ome
@@ -27,7 +27,15 @@ services:
     networks:
       ome_net:
         ipv4_address: 172.21.0.2
-    # No `ports:` on purpose: NNTP cannot be reachable from outside.
+{% if ome_nntp_peers | length > 0 %}
+    # Published only when this node has peers. Docker bypasses firewalld for
+    # published ports, so the nftables table ome_nntp (role ome,
+    # ome-nntp-peers.nft) lets only the peers through.
+    ports:
+      - "{{ ome_nntp_port }}:119"
+{% else %}
+    # No peers, so don't publish the NNTP port on the host.
+{% endif %}
 
   fastapi-server:
     image: {{ ome_api_image }}
@@ -69,10 +77,10 @@ services:
     command: ["--label-enable", "--cleanup", "--interval", "{{ ome_watchtower_interval }}"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-  
+
 secrets:
   ome_config:
-    file: {{ ome_src_dir }}/config.json 
+    file: {{ ome_src_dir }}/config.json
 
 networks:
   ome_net:

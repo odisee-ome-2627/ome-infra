@@ -1,0 +1,33 @@
+#!/usr/sbin/nft -f
+# {{ ansible_managed }}
+#
+# Only the NNTP peers may reach port 119 of the NNTP container.
+# Docker forwards published ports with DNAT, and firewalld accepts all DNAT
+# traffic ("ct status dnat accept") before its own policies, so firewalld
+# cannot filter it. This separate table rejects that traffic itself: a reject
+# in any nftables chain is final, whatever Docker or firewalld accept later.
+
+# Replace the whole table in one step: create it if needed, delete it, add it again.
+table inet ome_nntp
+delete table inet ome_nntp
+
+table inet ome_nntp {
+    set peers {
+        type ipv4_addr
+{% if ome_nntp_peers | length > 0 %}
+        elements = { {{ ome_nntp_peers | map(attribute='incoming_ip') | join(', ') }} }
+{% endif %}
+    }
+
+    chain forward {
+        # Before Docker (priority 0) and firewalld (priority +10).
+        type filter hook forward priority filter - 5; policy accept;
+
+        # Traffic from a published port (DNAT) to NNTP (port 119 in the container).
+        ct status dnat tcp dport 119 ip saddr != @peers reject with tcp reset
+
+        # IPv6: no peers use IPv6, so refuse it all. ("nft list" hides the
+        # IPv6 check of this rule, but it is there.)
+        ct status dnat tcp dport 119 meta nfproto ipv6 reject with tcp reset
+    }
+}
