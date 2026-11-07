@@ -39,6 +39,9 @@ INN itself sees the real source IP of a peer (DNAT keeps the source), so `incomi
   network without DNAT and is not affected.
 - A systemd service **`ome-nntp-firewall`** loads the file at boot, after firewalld and
   **before Docker**, so the port is never open without the filter, also not after a reboot.
+- A drop-in for `docker.service` (`docker.service.d/ome-nntp-firewall.conf`, `Requires=` and
+  `After=`) makes Docker depend on that service: if the filter cannot be loaded, Docker and the
+  OME stack do not start (fail closed). `Before=` in the service alone only sets the order.
 - Ansible validates the file with `nft -c` before placing it, and reloads it with `nft -f`
   when it changes, before the stack starts (`flush_handlers`).
 
@@ -53,6 +56,12 @@ INN itself sees the real source IP of a peer (DNAT keeps the source), so `incomi
   (verified with `nft --debug=netlink`).
 - Stopping the service does not remove the rules (fail closed). Removing them is a
   deliberate action: `nft delete table inet ome_nntp`.
+  - If the filter fails to load, the whole node is down (also the frontend) and Uptime Kuma
+  alerts: a node that is down is better than a node that is open without anyone knowing.
+  Tested: with a broken `.nft` file Docker refused to start
+  (`A dependency job for docker.service failed`).
+- `Requires=` also works the other way: `systemctl stop` or `restart ome-nntp-firewall` stops or
+  restarts Docker. Reload the rules with `systemctl reload ome-nntp-firewall` or `nft -f`.
 
 ## Alternatives considered
 
