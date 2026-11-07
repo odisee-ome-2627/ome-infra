@@ -1,3 +1,8 @@
 #SPDX-License-Identifier: MIT-0
 ---
 # handlers file for roles/ome
+
+- name: Load the NNTP peer filter
+  ansible.builtin.command:
+    cmd: nft -f /etc/nftables/ome-nntp-peers.nft
+  changed_when: true

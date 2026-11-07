@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+[Unit]
+Description=OME: only the NNTP peers may reach port 119 (nftables table ome_nntp)
+# Load the table after firewalld and before Docker publishes port 119,
+# so the port is never open without the filter, also not after a reboot.
+After=firewalld.service
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/nftables/ome-nntp-peers.nft
+ExecReload=/usr/sbin/nft -f /etc/nftables/ome-nntp-peers.nft
+
+[Install]
+WantedBy=multi-user.target
