@@ -32,8 +32,12 @@ INN itself sees the real source IP of a peer (DNAT keeps the source), so `incomi
   `ome-nntp-peers.nft.j2` to `/etc/nftables/ome-nntp-peers.nft`:
   - a set `peers` with the IPv4 addresses of the peers (`ome_nntp_peers`, built from the inventory);
   - a chain on the **forward** hook, priority `filter - 5`, policy accept, that rejects
-    **DNAT traffic to port 119** from every source that is not in `peers`, and all IPv6
-    traffic to port 119.
+    **DNAT traffic to port 119** from every source that is not in `peers`. IPv6 DNAT traffic
+    to port 119 is rejected as well, as a second line of defence.
+- Port 119 is published on **IPv4 only** (`0.0.0.0:119`). The Docker network has no IPv6, so
+  Docker passes IPv6 traffic on through `docker-proxy` on the host, without DNAT: it takes the
+  INPUT path, the forward filter never sees it, and INN sees it coming from the gateway
+  `172.21.0.1`, which `readers.conf` trusts. Found in review by Celine.
 - A reject in any nftables chain is final, so Docker's and firewalld's accepts cannot undo it.
 - Only DNAT traffic is matched (`ct status dnat`): the API reaches INN inside the Docker
   network without DNAT and is not affected.

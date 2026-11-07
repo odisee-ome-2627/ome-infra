@@ -28,11 +28,12 @@ services:
       ome_net:
         ipv4_address: 172.21.0.2
 {% if ome_nntp_peers | length > 0 %}
-    # Published only when this node has peers. Docker bypasses firewalld for
-    # published ports, so the nftables table ome_nntp (role ome,
-    # ome-nntp-peers.nft) lets only the peers through.
+    # Published only when this node has peers, and only on IPv4: on IPv6,
+    # docker-proxy would pass the traffic on without DNAT, so the nftables
+    # table ome_nntp (role ome, ome-nntp-peers.nft) could not filter it.
+    # The table lets only the peers through.
     ports:
-      - "{{ ome_nntp_port }}:119"
+      - "0.0.0.0:{{ ome_nntp_port }}:119"
 {% else %}
     # No peers, so don't publish the NNTP port on the host.
 {% endif %}
