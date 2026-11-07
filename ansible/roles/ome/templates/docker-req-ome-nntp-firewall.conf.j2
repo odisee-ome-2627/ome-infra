@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+# Docker may only start when the NNTP peer filter is loaded (fail closed):
+# if ome-nntp-firewall fails, Docker and the OME stack do not start, so
+# port 119 is never published without the filter.
+[Unit]
+Requires=ome-nntp-firewall.service
+After=ome-nntp-firewall.service
