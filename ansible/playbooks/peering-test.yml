@@ -1,0 +1,67 @@
+---
+# Peering test: every node posts one test article in the group ome.test, then
+# every node checks that it received the articles of all the other nodes.
+#
+#   ansible-playbook -i inventories/staging playbooks/peering-test.yml
+- name: Post a test article on every node
+  hosts: ome_nodes
+  become: true
+  vars: &peering_test_vars
+    peering_test_group: ome.test
+    # Compose file written by ome role
+    peering_test_compose_file: /opt/ome/compose.yml
+    peering_test_exec: "docker compose -f {{ peering_test_compose_file }} exec -T nntp-server"
+  tasks:
+    - name: Check whether the test group exists
+      ansible.builtin.command:
+        cmd: "{{ peering_test_exec }} grep -q '^{{ peering_test_group }} ' /var/lib/news/active"
+      register: peering_test_group_check
+      changed_when: false
+      failed_when: peering_test_group_check.rc not in [0, 1]
+    
+    - name: Create the test group
+      ansible.builtin.command:
+        cmd: "{{ peering_test_exec }} ctlinnd newgroup {{ peering_test_group }}"
+      when: peering_test_group_check.rc == 1
+      changed_when: true
+    
+    - name: Choose a Message-ID for the test article of this node
+      ansible.builtin.set_fact:
+        peering_test_message_id: "<peering-test-{{ now(utc=true, fmt='%Y%m%d%H%M%S') }}-{{ inventory_hostname }}@{{ inventory_hostname }}.invalid>"
+    
+    - name: Post the test article
+      ansible.builtin.command:
+        cmd: "{{ peering_test_exec }} sh -c 'NNTPSERVER=localhost inews -h'"
+        stdin: |
+          Newsgroups: {{ peering_test_group }}
+          From: OME peering test <ome@{{ inventory_hostname }}.invalid>
+          Subject: Peering test from {{ inventory_hostname }}
+          Message-ID: {{ peering_test_message_id }}
+
+          Posted by playbooks/peering-test.yml on {{ inventory_hostname }}.
+      changed_when: true
+
+
+- name: Check that every node received the articles of the other nodes
+  hosts: ome_nodes
+  become: true
+  gather_facts: false
+  vars: *peering_test_vars
+  tasks:
+    - name: Wait until the test article of each peer has arrived
+      ansible.builtin.command:
+        cmd: "{{ peering_test_exec }} /usr/lib/news/bin/grephistory '{{ hostvars[item].peering_test_message_id }}'"
+      loop: "{{ groups['ome_nodes'] | difference([inventory_hostname]) }}"
+      loop_control:
+        label: "{{ item }}"
+      register: peering_test_received
+      until: peering_test_received.rc == 0
+      retries: 12
+      delay: 5
+      changed_when: false
+
+    - name: Show the result
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} received the test articles of
+          {{ groups['ome_nodes'] | difference([inventory_hostname]) | join(', ') }}
