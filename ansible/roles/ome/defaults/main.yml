@@ -41,9 +41,11 @@ ome_organization: "Odisee OME team ({{ ome_env }})"
 ome_hostname: "{{ inventory_hostname }}"
 ome_cms_plugin: server.plugins.qubes.plugin.QubesPlugin
 
-# NNTP peers. Empty = this node does not exchange metadata with other nodes.
-# Multi-node peering is a later story (see docs/runbook.md).
+# NNTP peers. Built in tasks/main.yml from the other hosts in `ome_nodes`:
+# adding a node to hosts.yml makes it a peer of every other node.
+# With one node (dev, production) the list stays empty.
 ome_nntp_peers: []
+ome_nntp_port: 119
 
 ome_nntp_user: ome
 ome_nntp_debug_user: debugreader
