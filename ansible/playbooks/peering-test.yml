@@ -11,6 +11,7 @@
     # Compose file written by ome role
     peering_test_compose_file: /opt/ome/compose.yml
     peering_test_exec: "docker compose -f {{ peering_test_compose_file }} exec -T nntp-server"
+    peering_test_receiver: "{{ groups['ome_nodes'] | last }}"
   tasks:
     - name: Check whether the test group exists
       ansible.builtin.command:
@@ -46,7 +47,7 @@
   hosts: ome_nodes
   become: true
   gather_facts: false
-  vars: *peering_test_vars
+  vars: *peering_test_vars # Label on the first play
   tasks:
     - name: Wait until the test article of each peer has arrived
       ansible.builtin.command:
@@ -65,3 +66,69 @@
         msg: >-
           {{ inventory_hostname }} received the test articles of
           {{ groups['ome_nodes'] | difference([inventory_hostname]) | join(', ') }}
+
+
+- name: Store and forward test (only with --tags store_and_forward)
+  hosts: ome_nodes
+  become: true
+  tags: [never, store_and_forward]
+  vars: *peering_test_vars
+  tasks:
+    - name: Cut off the receiver, post, restore, and check that the articles still arrive
+      block:
+        - name: Cut the receiver off from its peers
+          ansible.builtin.command:
+            cmd: nft flush set inet ome_nntp peers
+          when: inventory_hostname == peering_test_receiver
+          changed_when: true
+
+        - name: Choose a Message-ID for the store and forward article
+          ansible.builtin.set_fact:
+            peering_test_sf_message_id: "<store-and-forward-{{ now(utc=true, fmt='%Y%m%d%H%M%S') }}-{{ inventory_hostname }}@{{ inventory_hostname }}.invalid>"
+          when: inventory_hostname != peering_test_receiver
+
+        - name: Post while the receiver is unreachable
+          ansible.builtin.command:
+            cmd: "{{ peering_test_exec }} sh -c 'NNTPSERVER=localhost inews -h'"
+            stdin: |
+              Newsgroups: {{ peering_test_group }}
+              From: OME peering test <ome@{{ inventory_hostname }}.invalid>
+              Subject: Store and forward test from {{ inventory_hostname }}
+              Message-ID: {{ peering_test_sf_message_id }}
+
+              Posted while {{ peering_test_receiver }} was unreachable.
+          when: inventory_hostname != peering_test_receiver
+          changed_when: true
+
+        - name: Check that the receiver did not get the articles yet
+          ansible.builtin.command:
+            cmd: "{{ peering_test_exec }} /usr/lib/news/bin/grephistory '{{ hostvars[item].peering_test_sf_message_id }}'"
+          loop: "{{ groups['ome_nodes'] | difference([peering_test_receiver]) }}"
+          register: peering_test_sf_before
+          failed_when: peering_test_sf_before.rc != 1
+          changed_when: false
+          when: inventory_hostname == peering_test_receiver
+
+        - name: Restore the receiver's peers
+          ansible.builtin.command:
+            cmd: systemctl reload ome-nntp-firewall
+          when: inventory_hostname == peering_test_receiver
+          changed_when: true
+
+        - name: Wait until the articles arrive after the interruption
+          ansible.builtin.command:
+            cmd: "{{ peering_test_exec }} /usr/lib/news/bin/grephistory '{{ hostvars[item].peering_test_sf_message_id }}'"
+          loop: "{{ groups['ome_nodes'] | difference([peering_test_receiver]) }}"
+          register: peering_test_sf_after
+          until: peering_test_sf_after.rc == 0
+          retries: 30
+          delay: 10
+          changed_when: false
+          when: inventory_hostname == peering_test_receiver
+
+      always:
+        - name: Make sure the receiver's peers are restored, also when the test failed
+          ansible.builtin.command:
+            cmd: systemctl reload ome-nntp-firewall
+          when: inventory_hostname == peering_test_receiver
+          changed_when: true
