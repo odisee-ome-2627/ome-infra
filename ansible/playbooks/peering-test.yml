@@ -6,7 +6,7 @@
 - name: Post a test article on every node
   hosts: ome_nodes
   become: true
-  vars: &peering_test_vars
+  vars: &peering_test_vars # YAML anchor for the vars of this play, so they can be reused in the next plays
     peering_test_group: ome.test
     # Compose file written by ome role
     peering_test_compose_file: /opt/ome/compose.yml
@@ -23,7 +23,7 @@
         quiet: true
       run_once: true
       tags: [always]
-      
+
     - name: Check whether the test group exists
       ansible.builtin.command:
         cmd: "{{ peering_test_exec }} grep -q '^{{ peering_test_group }} ' /var/lib/news/active"
@@ -58,7 +58,7 @@
   hosts: ome_nodes
   become: true
   gather_facts: false
-  vars: *peering_test_vars # Label on the first play
+  vars: *peering_test_vars # YAML alias of the vars of play 1
   tasks:
     - name: Wait until the test article of each peer has arrived
       ansible.builtin.command:
