@@ -14,6 +14,16 @@
     peering_test_receiver: "{{ groups['ome_nodes'] | last }}"
     peering_test_delivery_window: 30 # A normal delivery arrives within a few seconds, so 30 seconds is a safe margin.
   tasks:
+    - name: Make sure there are at least 2 nodes to test peering with
+      ansible.builtin.assert:
+        that: groups['ome_nodes'] | length >= 2
+        fail_msg: >-
+          Peering needs at least 2 nodes, but the inventory has
+          {{ groups['ome_nodes'] | length }} in ome_nodes. Nothing to test.
+        quiet: true
+      run_once: true
+      tags: [always]
+      
     - name: Check whether the test group exists
       ansible.builtin.command:
         cmd: "{{ peering_test_exec }} grep -q '^{{ peering_test_group }} ' /var/lib/news/active"
