@@ -12,6 +12,7 @@
     peering_test_compose_file: /opt/ome/compose.yml
     peering_test_exec: "docker compose -f {{ peering_test_compose_file }} exec -T nntp-server"
     peering_test_receiver: "{{ groups['ome_nodes'] | last }}"
+    peering_test_delivery_window: 30 # A normal delivery arrives within a few seconds, so 30 seconds is a safe margin.
   tasks:
     - name: Check whether the test group exists
       ansible.builtin.command:
@@ -99,6 +100,10 @@
               Posted while {{ peering_test_receiver }} was unreachable.
           when: inventory_hostname != peering_test_receiver
           changed_when: true
+
+        - name: Wait as long as a normal delivery takes (with margin)
+          ansible.builtin.pause:
+            seconds: "{{ peering_test_delivery_window }}"
 
         - name: Check that the receiver did not get the articles yet
           ansible.builtin.command:
