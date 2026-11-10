@@ -11,4 +11,5 @@ users:
     sudo: "ALL=(ALL) NOPASSWD:ALL"
     ssh_authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKYbTxoCH4H9AU3icxaHW6UZpXK9k6iS5Mgz+uCC+Ve mattis.callens@student.odisee.be
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILJFKXjhvfL/vhqQRruZOuu/viEU9gZwR5Xvh5PQqMwp maxim@Laptop-Maxim
 ssh_pwauth: false
