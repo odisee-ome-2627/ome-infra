@@ -1,0 +1,33 @@
+---
+# Shows innfeed.log of the senders when an article is missing, and then fails.
+# Runs on the node that missed the article. peering_test_senders lists the nodes
+# that should have sent it. Used in the rescue of playbooks/peering-test.yml.
+#
+# innfeed.log shows the sending side: refused connections, backoff, backlog.
+# The receiving side is grephistory (the history of innd), which the failed check
+# already shows. The innd logs themselves are not usable here: the container has no
+# syslog (news.notice stays empty), and innd runs in debug mode (-d), so its article
+# log goes to stdout with a delay and ctlinnd flushlogs is refused.
+
+- name: Read innfeed.log on the senders (did they try to send to this node?)
+  ansible.builtin.command:
+    cmd: >-
+      {{ peering_test_exec }} sh -c
+      'grep -F {{ hostvars[inventory_hostname].ome_hostname | default(inventory_hostname) }}
+      /var/log/news/innfeed.log | grep -v hostChkCxns | tail -n 20'
+  delegate_to: "{{ item }}"
+  loop: "{{ peering_test_senders }}"
+  register: peering_test_innfeed
+  changed_when: false
+  failed_when: false
+
+- name: Show innfeed.log of the senders
+  ansible.builtin.debug:
+    msg: "{{ peering_test_innfeed.results | items2dict(key_name='item', value_name='stdout_lines') }}"
+
+- name: Fail, because an article is missing
+  ansible.builtin.fail:
+    msg: >-
+      The peering test failed on {{ inventory_hostname }} (articles from
+      {{ peering_test_senders | join(', ') }}). See the failed check and
+      innfeed.log of the senders above.

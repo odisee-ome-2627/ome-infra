@@ -1,0 +1,175 @@
+---
+# Peering test: every node posts one test article in the group ome.test, then
+# every node checks that it received the articles of all the other nodes.
+#
+#   ansible-playbook -i inventories/staging playbooks/peering-test.yml
+#
+# Also run the store and forward test (cuts one node off for a while):
+#
+#   ansible-playbook -i inventories/staging playbooks/peering-test.yml --tags all,store_and_forward
+#
+# When the test fails, the playbook shows innfeed.log of the senders and stops
+# (see tasks/peering-test-show-logs.yml).  
+
+- name: Post a test article on every node
+  hosts: ome_nodes
+  become: true
+  gather_facts: false
+  vars: &peering_test_vars # YAML anchor: plays 2 and 3 reuse these vars with *peering_test_vars
+    peering_test_group: ome.test
+    # Compose file written by the ome role
+    peering_test_compose_file: /opt/ome/compose.yml
+    peering_test_exec: "docker compose -f {{ peering_test_compose_file }} exec -T nntp-server"
+    peering_test_receiver: "{{ groups['ome_nodes'] | last }}"
+    # A normal delivery arrives within a few seconds (play 2 succeeds at its first check),
+    # so 30 seconds is a safe margin.
+    peering_test_delivery_window: 30
+  tasks:
+    - name: Make sure there are at least 2 nodes to test peering with
+      ansible.builtin.assert:
+        that: groups['ome_nodes'] | length >= 2
+        fail_msg: >-
+          Peering needs at least 2 nodes, but the inventory has
+          {{ groups['ome_nodes'] | length }} in ome_nodes. Nothing to test.
+        quiet: true
+      run_once: true
+      tags: [always]
+
+    - name: Check whether the test group exists
+      ansible.builtin.command:
+        cmd: "{{ peering_test_exec }} grep -q '^{{ peering_test_group }} ' /var/lib/news/active"
+      register: peering_test_group_check
+      changed_when: false
+      failed_when: peering_test_group_check.rc not in [0, 1]
+
+    - name: Create the test group
+      ansible.builtin.command:
+        cmd: "{{ peering_test_exec }} ctlinnd newgroup {{ peering_test_group }}"
+      when: peering_test_group_check.rc == 1
+      changed_when: true
+
+    - name: Choose a Message-ID for the test article of this node
+      ansible.builtin.set_fact:
+        peering_test_message_id: "<peering-test-{{ now(utc=true, fmt='%Y%m%d%H%M%S') }}-{{ inventory_hostname }}@{{ inventory_hostname }}.invalid>"
+
+    - name: Post the test article
+      ansible.builtin.command:
+        cmd: "{{ peering_test_exec }} sh -c 'NNTPSERVER=localhost inews -h'"
+        stdin: |
+          Newsgroups: {{ peering_test_group }}
+          From: OME peering test <ome@{{ inventory_hostname }}.invalid>
+          Subject: Peering test from {{ inventory_hostname }}
+          Message-ID: {{ peering_test_message_id }}
+
+          Posted by playbooks/peering-test.yml on {{ inventory_hostname }}.
+      changed_when: true
+
+
+- name: Check that every node received the articles of the other nodes
+  hosts: ome_nodes
+  become: true
+  gather_facts: false
+  vars: *peering_test_vars # YAML alias of the vars of play 1
+  tasks:
+    - name: Check the articles of the peers, and show the logs if one is missing
+      block:
+        - name: Wait until the test article of each peer has arrived
+          ansible.builtin.command:
+            cmd: "{{ peering_test_exec }} /usr/lib/news/bin/grephistory '{{ hostvars[item].peering_test_message_id }}'"
+          loop: "{{ groups['ome_nodes'] | difference([inventory_hostname]) }}"
+          loop_control:
+            label: "{{ item }}"
+          register: peering_test_received
+          until: peering_test_received.rc == 0
+          retries: 12
+          delay: 5
+          changed_when: false
+
+      rescue:
+        - name: Show the logs that explain the missing article
+          ansible.builtin.import_tasks: tasks/peering-test-show-logs.yml
+          vars:
+            peering_test_senders: "{{ groups['ome_nodes'] | difference([inventory_hostname]) }}"
+
+    - name: Show the result
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} received the test articles of
+          {{ groups['ome_nodes'] | difference([inventory_hostname]) | join(', ') }}
+
+
+- name: Store and forward test (only with --tags store_and_forward)
+  hosts: ome_nodes
+  become: true
+  gather_facts: false
+  tags: [never, store_and_forward]
+  vars: *peering_test_vars # YAML alias of the vars of play 1
+  tasks:
+    - name: Cut off the receiver, post, restore, and check that the articles still arrive
+      block:
+        - name: Cut the receiver off from its peers
+          ansible.builtin.command:
+            cmd: nft flush set inet ome_nntp peers
+          when: inventory_hostname == peering_test_receiver
+          changed_when: true
+
+        - name: Choose a Message-ID for the store and forward article
+          ansible.builtin.set_fact:
+            peering_test_sf_message_id: "<store-and-forward-{{ now(utc=true, fmt='%Y%m%d%H%M%S') }}-{{ inventory_hostname }}@{{ inventory_hostname }}.invalid>"
+          when: inventory_hostname != peering_test_receiver
+
+        - name: Post while the receiver is unreachable
+          ansible.builtin.command:
+            cmd: "{{ peering_test_exec }} sh -c 'NNTPSERVER=localhost inews -h'"
+            stdin: |
+              Newsgroups: {{ peering_test_group }}
+              From: OME peering test <ome@{{ inventory_hostname }}.invalid>
+              Subject: Store and forward test from {{ inventory_hostname }}
+              Message-ID: {{ peering_test_sf_message_id }}
+
+              Posted while {{ peering_test_receiver }} was unreachable.
+          when: inventory_hostname != peering_test_receiver
+          changed_when: true
+
+        - name: Wait as long as a normal delivery takes (with margin)
+          ansible.builtin.pause:
+            seconds: "{{ peering_test_delivery_window }}"
+
+        - name: Check that the receiver did not get the articles yet
+          ansible.builtin.command:
+            cmd: "{{ peering_test_exec }} /usr/lib/news/bin/grephistory '{{ hostvars[item].peering_test_sf_message_id }}'"
+          loop: "{{ groups['ome_nodes'] | difference([peering_test_receiver]) }}"
+          register: peering_test_sf_before
+          failed_when: peering_test_sf_before.rc != 1
+          changed_when: false
+          when: inventory_hostname == peering_test_receiver
+
+        - name: Restore the receiver's peers
+          ansible.builtin.command:
+            cmd: systemctl reload ome-nntp-firewall
+          when: inventory_hostname == peering_test_receiver
+          changed_when: true
+
+        - name: Wait until the articles arrive after the interruption
+          ansible.builtin.command:
+            cmd: "{{ peering_test_exec }} /usr/lib/news/bin/grephistory '{{ hostvars[item].peering_test_sf_message_id }}'"
+          loop: "{{ groups['ome_nodes'] | difference([peering_test_receiver]) }}"
+          register: peering_test_sf_after
+          until: peering_test_sf_after.rc == 0
+          retries: 30
+          delay: 10
+          changed_when: false
+          when: inventory_hostname == peering_test_receiver
+
+      rescue:
+        - name: Show the logs that explain what went wrong
+          ansible.builtin.import_tasks: tasks/peering-test-show-logs.yml
+          vars:
+            peering_test_senders: "{{ groups['ome_nodes'] | difference([peering_test_receiver]) }}"
+
+      always:
+        - name: Make sure the receiver's peers are restored, also when the test failed
+          ansible.builtin.command:
+            cmd: systemctl reload ome-nntp-firewall
+          when: inventory_hostname == peering_test_receiver
+          changed_when: true
