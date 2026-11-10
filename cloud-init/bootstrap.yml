@@ -12,4 +12,5 @@ users:
     ssh_authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJKYbTxoCH4H9AU3icxaHW6UZpXK9k6iS5Mgz+uCC+Ve mattis.callens@student.odisee.be
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILJFKXjhvfL/vhqQRruZOuu/viEU9gZwR5Xvh5PQqMwp maxim@Laptop-Maxim
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN7WzLWtggAVyW746IXDfbgGuUB4SpQzB25e9pmU6ZT8 ansible@ome-controlhost-MD
 ssh_pwauth: false
