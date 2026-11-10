@@ -32,7 +32,7 @@
     state: enabled
     immediate: yes
 
-- name: Check that the lust of admin SSH keys is not empty
+- name: Check that the list of admin SSH keys is not empty
   ansible.builtin.assert:
     that:
       - common_admin_keys | length > 0
