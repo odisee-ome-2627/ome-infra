@@ -442,8 +442,40 @@ ssh ansible@<server-ip> 'sudo docker run --rm -v /var/run/docker.sock:/var/run/d
 first. If a new version of the application changes how the images start (Dockerfile, entrypoint),
 update the compose template of the role `ome` before you roll it out.
 
-**Roll back:** publish the previous version again under the tag of the environment, or retag a
-previous image as that tag, and run `docker compose up -d <service>`. Write down what happened.
+**Roll back.** A release breaks something: go back to the previous version first, find the cause
+after. There are two ways.
+
+1. **Revert in Git (the normal way).** On GitHub, open the merged pull request and click **Revert**.
+   Merge the pull request it creates (and promote it, for staging or production). CI publishes a new
+   image, and Watchtower puts it on the servers within about ten minutes. Nothing to do on the servers.
+2. **By hand on the server (emergency only)**, when the environment cannot wait for that. This applies
+   to the API and frontend; every image is also published as `<env>-<sha>`, so a previous version
+   stays available.
+
+   1. Stop Watchtower. Otherwise it sees that the image under the tag of the environment differs
+      from the registry, and puts the broken version back within five minutes:
+
+      ```bash
+      sudo docker compose -f /opt/ome/compose.yml stop watchtower
+      ```
+
+   2. Give a previous image the tag of the environment, and restart only that service (here the
+      API; for the frontend use `ome-frontend` and `imls-react`):
+
+      ```bash
+      sudo docker pull ghcr.io/<org>/ome-api:<env>-<sha>
+      sudo docker tag ghcr.io/<org>/ome-api:<env>-<sha> ghcr.io/<org>/ome-api:<env>
+      sudo docker compose -f /opt/ome/compose.yml up -d --no-deps fastapi-server
+      ```
+
+   3. Revert in Git as in way 1, and wait until the fixed image is published.
+   4. Start Watchtower again, and write a short incident note:
+
+      ```bash
+      sudo docker compose -f /opt/ome/compose.yml up -d watchtower
+      ```
+
+The NNTP image is built on the server, so for NNTP only way 1 applies: revert, then run `site.yml`.
 
 ---
 
@@ -505,6 +537,7 @@ with the new configuration (ADR 0009). Before a commit, the file must start with
 | The frontend does not answer on port 4000 | On the servers it is on port 80: `http://<server-ip>/imls/` (chapter 3.2). |
 | `Decryption failed` | Wrong Vault password, or a `vault.yml` encrypted with another password (chapter 2). |
 | `nntp-server` keeps `Restarting` after a reboot or a restart of Docker | Leftover pid, socket and lock files from the previous run. Recreate the containers: `sudo docker compose -f /opt/ome/compose.yml up -d --force-recreate nntp-server fastapi-server`. A fix in the image is planned. |
+| NNTP runs old code, or its image is missing, after a run of `site.yml` that failed halfway | Build and recreate it by hand: `sudo docker compose -f /opt/ome/compose.yml up -d --build --force-recreate --no-deps nntp-server`. A fix is planned: publish the NNTP image instead of building it on the servers. |
 | `A dependency job for docker.service failed` | The firewall table could not be loaded, so Docker does not start (on purpose). `systemctl status ome-nntp-firewall` and `sudo nft -c -f /etc/nftables/ome-nntp-peers.nft` show the error. Fix it, then start `ome-nntp-firewall` and `docker`. |
 | Peering test fails for one direction | Chapter 5, "Reading the result". |
 | A non-peer still reaches port 119 | `sudo nft list table inet ome_nntp` must exist and `ss -tlnp` must only show `0.0.0.0:119` (chapter 4.3). |
@@ -558,5 +591,5 @@ Only for the Odisee team. Other organisations use their own values (chapter 2).
 - **Monitoring:** Uptime Kuma on `http://10.129.80.47:3001/`, alerts in Discord `#ome-alerts`.
 - **API docs** (not through nginx): `ssh -L 8000:172.21.0.3:8000 ansible@<server-ip>`, then
   `http://localhost:8000/docs`.
-- **Rollback in an emergency:** stop Watchtower, retag a previous `<env>-<sha>` image as `<env>`,
-  `docker compose up -d <service>`, and write an incident note in `docs/incidents/`.
+- **Rollback:** revert the pull request on GitHub (chapter 7, way 1). Only in an emergency by hand
+  (way 2), with `ghcr.io/odisee-ome-2627` as registry; write the incident note in `docs/incidents/`.
