@@ -31,3 +31,17 @@
     permanent: true
     state: enabled
     immediate: yes
+
+- name: Check that the list of admin SSH keys is not empty
+  ansible.builtin.assert:
+    that:
+      - common_admin_keys | length > 0
+    fail_msg: "The list of admin SSH keys is empty. Please add at least one key in playbooks/group_vars/all/admin_keys.yml."
+    quiet: true
+
+- name: Allow only the team's SSH keys for the admin user
+  ansible.posix.authorized_key:
+    user: "{{ common_admin_user }}"
+    key: "{{ common_admin_keys | map(attribute='key') | join('\n') }}"
+    exclusive: true
+    state: present
