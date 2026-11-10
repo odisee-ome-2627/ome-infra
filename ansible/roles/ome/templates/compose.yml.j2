@@ -19,7 +19,7 @@ services:
     build:
       context: {{ ome_src_dir }}
       dockerfile: Dockerfile-nntp
-    pull_policy: build
+    pull_policy: never
     hostname: nntp-server
     secrets:
       - ome_config

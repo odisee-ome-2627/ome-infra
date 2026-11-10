@@ -121,16 +121,33 @@
     files:
       - compose.yml
     state: present
-    # Rebuild the NNTP image only when its source or config changed.
-    build: policy
+    # Build the NNTP image only when the fork checkout changed
+    # (always on a new server: the first checkout counts as a change).
+    build: "{{ 'always' if ome_src.changed else 'never' }}"
     # Each service's pull_policy decides: NNTP is built here, API and
     # frontend are pulled when missing. Watchtower handles later updates.
     pull: policy
     # API and NNTP read config.json only at start (recreate them when changed)
     recreate: "{{ 'always' if (ome_nntp_config.changed) else 'auto' }}"
     remove_orphans: true
-
   register: ome_stack
+
+- name: Recreate the NNTP container when its image was rebuilt
+  # Compose does not recreate a container when only the image behind its tag
+  # changed, so NNTP would keep running the old code. NNTP has no volume yet,
+  # so this also deletes the articles on this node (volumes: next sprint).
+  community.docker.docker_compose_v2:
+    project_src: "{{ ome_base_dir }}"
+    files:
+      - compose.yml
+    services:
+      - nntp-server
+    dependencies: false
+    build: never
+    pull: never
+    recreate: always
+    state: present
+  when: ome_src.changed
 
 - name: Pre-seed newsgroups from the configured peers
   # Same as upstream's post_start hook. Only useful when peers are set.
