@@ -18,14 +18,12 @@
     group: root
     mode: "0755"
 
-- name: Check out the fork on the branch of this environment
-  # Needed to build the NNTP image on the server.
-  ansible.builtin.git:
-    repo: "{{ ome_repo_url }}"
-    dest: "{{ ome_src_dir }}"
-    version: "{{ ome_branch }}"
-    force: false
-  register: ome_src
+- name: Remove the old fork checkout
+  # Only needed to build the NNTP image, which is now pulled from GHCR.
+  # It also held a copy of config.json with the passwords.
+  ansible.builtin.file:
+    path: "{{ ome_old_src_dir }}"
+    state: absent
 
 - name: Build the NNTP peers from the other nodes in the inventory
   ansible.builtin.set_fact:
@@ -41,7 +39,7 @@
 - name: Render config.json (mounted as the ome_config secret)
   ansible.builtin.template:
     src: config.json.j2
-    dest: "{{ ome_src_dir }}/config.json"
+    dest: "{{ ome_base_dir }}/config.json"
     owner: root
     group: root
     mode: "0600"
@@ -121,33 +119,14 @@
     files:
       - compose.yml
     state: present
-    # Build the NNTP image only when the fork checkout changed
-    # (always on a new server: the first checkout counts as a change).
-    build: "{{ 'always' if ome_src.changed else 'never' }}"
-    # Each service's pull_policy decides: NNTP is built here, API and
-    # frontend are pulled when missing. Watchtower handles later updates.
+    build: never
+    # pull_policy: missing for every image: pulled on a new server, and
+    # Watchtower handles later updates.
     pull: policy
     # API and NNTP read config.json only at start (recreate them when changed)
     recreate: "{{ 'always' if (ome_nntp_config.changed) else 'auto' }}"
     remove_orphans: true
   register: ome_stack
-
-- name: Recreate the NNTP container when its image was rebuilt
-  # Compose does not recreate a container when only the image behind its tag
-  # changed, so NNTP would keep running the old code. NNTP has no volume yet,
-  # so this also deletes the articles on this node (volumes: next sprint).
-  community.docker.docker_compose_v2:
-    project_src: "{{ ome_base_dir }}"
-    files:
-      - compose.yml
-    services:
-      - nntp-server
-    dependencies: false
-    build: never
-    pull: never
-    recreate: always
-    state: present
-  when: ome_src.changed
 
 - name: Pre-seed newsgroups from the configured peers
   # Same as upstream's post_start hook. Only useful when peers are set.
@@ -157,7 +136,7 @@
       sh -c "/usr/local/bin/wait_for_tcp.sh 119 20 && /usr/local/bin/preseed.sh"
   when:
     - ome_nntp_peers | length > 0
-    - ome_src.changed or ome_nntp_config.changed
+    - ome_stack.changed or ome_nntp_config.changed
   register: ome_preseed
   changed_when: ome_preseed.rc == 0
   failed_when: false

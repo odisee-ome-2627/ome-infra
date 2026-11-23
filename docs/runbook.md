@@ -120,7 +120,7 @@ them with your own before you configure a server. The roles and playbooks stay a
 | Passwords | `inventories/<env>/group_vars/all/vault.yml` | Delete the Odisee files and create your own (chapter 9). They cannot be decrypted without the Odisee Vault password anyway. |
 | Who may log in | `playbooks/group_vars/all/admin_keys.yml` | The public SSH keys of **your** team. Only these keys are allowed: Ansible removes every other key from the servers. Your own key must be in it. |
 | First login on a new server | `cloud-init/bootstrap.yml` | Your own public key under `ssh_authorized_keys` (chapter 3.1) |
-| Application and images | `roles/ome/defaults/main.yml` | `ome_repo_url` (the repository the NNTP image is built from), `ome_registry` (where the API and frontend images are pulled from), `ome_branch_map` (which branch each environment follows) |
+| Application and images | `roles/ome/defaults/main.yml` | `ome_registry` (where the NNTP, API and frontend images are pulled from), `ome_branch_map` (which branch each environment follows) |
 | Your organisation | `roles/ome/defaults/main.yml` | `ome_organization` (shown in every article you post) and `ome_cms_plugin` (the plugin of your platform) |
 
 The keys are in two files because they are used at different moments:
@@ -421,15 +421,13 @@ Not covered yet: a restart of the **sending** node during the interruption (chap
 ## 7. Updates and roll back
 
 **Application updates.** Watchtower runs on every node and checks the registry every five minutes
-(`ome_watchtower_interval`). When a new API or frontend image is published under the tag your
-environment follows (`ome_image_tag`, by default the name of the environment), Watchtower
-replaces the container.
+(`ome_watchtower_interval`). When a new NNTP, API or frontend image is published under the tag
+your environment follows (`ome_image_tag`, by default the name of the environment), Watchtower
+replaces the container. Nothing is built on the servers.
 
-The NNTP image is built on the server by Ansible, from the branch of the application repository
-that the environment follows (`ome_branch_map`). Run `site.yml` to update it: when that branch has
-new commits, Ansible builds a new image and recreates only the NNTP container. Without new commits,
-nothing is built or restarted. Until NNTP has a volume, a recreate deletes the articles on that
-node (chapter 11).
+NNTP keeps its articles, history and backlog in the volumes `nntp-db` and `nntp-spool`, so a new
+image keeps them. Watchtower gives innd 30 seconds to stop cleanly (`--stop-timeout`, the same as
+`stop_grace_period` in the compose file).
 
 Follow Watchtower, or make it check now:
 
@@ -450,7 +448,7 @@ after. There are two ways.
    image, and Watchtower puts it on the servers within about ten minutes. Nothing to do on the servers.
 2. **By hand on the server (emergency only)**, when the environment cannot wait for that. This applies
    to the API and frontend; every image is also published as `<env>-<sha>`, so a previous version
-   stays available.
+   stays available. NNTP works the same way, with `ome-nntp` and `nntp-server`.
 
    1. Stop Watchtower. Otherwise it sees that the image under the tag of the environment differs
       from the registry, and puts the broken version back within five minutes:
@@ -475,7 +473,6 @@ after. There are two ways.
       sudo docker compose -f /opt/ome/compose.yml up -d watchtower
       ```
 
-The NNTP image is built on the server, so for NNTP only way 1 applies: revert, then run `site.yml`.
 
 ---
 
@@ -536,8 +533,8 @@ with the new configuration (ADR 0009). Before a commit, the file must start with
 | A new server asks for a password | The cloud-init user data was not applied, or you logged in before cloud-init finished (chapter 3.1). |
 | The frontend does not answer on port 4000 | On the servers it is on port 80: `http://<server-ip>/imls/` (chapter 3.2). |
 | `Decryption failed` | Wrong Vault password, or a `vault.yml` encrypted with another password (chapter 2). |
-| `nntp-server` keeps `Restarting` after a reboot or a restart of Docker | Leftover pid, socket and lock files from the previous run. Recreate the containers: `sudo docker compose -f /opt/ome/compose.yml up -d --force-recreate nntp-server fastapi-server`. A fix in the image is planned. |
-| NNTP runs old code, or its image is missing, after a run of `site.yml` that failed halfway | Build and recreate it by hand: `sudo docker compose -f /opt/ome/compose.yml up -d --build --force-recreate --no-deps nntp-server`. A fix is planned: publish the NNTP image instead of building it on the servers. |
+| `nntp-server` keeps `Restarting` after a reboot or a restart of Docker | The image has a clean stop and start since #244. If it still happens, the server runs an older image: pull it again (next row). |
+| NNTP runs an old image, or its image is missing | Pull and recreate it: `sudo docker compose -f /opt/ome/compose.yml pull nntp-server && sudo docker compose -f /opt/ome/compose.yml up -d nntp-server`. The volumes keep the articles. |
 | `A dependency job for docker.service failed` | The firewall table could not be loaded, so Docker does not start (on purpose). `systemctl status ome-nntp-firewall` and `sudo nft -c -f /etc/nftables/ome-nntp-peers.nft` show the error. Fix it, then start `ome-nntp-firewall` and `docker`. |
 | Peering test fails for one direction | Chapter 5, "Reading the result". |
 | A non-peer still reaches port 119 | `sudo nft list table inet ome_nntp` must exist and `ss -tlnp` must only show `0.0.0.0:119` (chapter 4.3). |
@@ -552,17 +549,12 @@ with the new configuration (ADR 0009). Before a commit, the file must start with
 
 ## 11. Known limitations
 
-- **No NNTP volume** (#150): articles, history and the innfeed backlog live in the container and
-  are lost when it is recreated, which happens after every new build of the NNTP image (chapter 7).
-- **Store and forward after a restart of the sender** is not tested: the backlog is written to tape
-  files in the container, but whether it survives a restart is not proven.
+- **The innfeed backlog** stays in memory after a short outage of a peer, and a power cut of the
+  sender loses it for that peer (#308).
 - **Newsgroups are not created automatically** on new nodes (chapter 4.4).
-- **Restart of the NNTP container** needs a recreate (chapter 10). innd does not stop on SIGTERM:
-  Docker kills it after 10 seconds, which leaves pid and lock files behind.
 - **INN logs to syslog**, which does not run in the container: `news.notice` stays empty. The
   article log lags behind because innd runs in debug mode (chapter 8).
 - **The peering test** only covers nodes in one inventory, not peering with another organisation.
-- **The NNTP image is built on every server** instead of pulled from a registry.
 - No DNS or HTTPS yet (#108, #109).
 
 ---
