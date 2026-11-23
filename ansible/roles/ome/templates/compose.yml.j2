@@ -2,28 +2,34 @@
 # Environment: {{ ome_env }} (follows branch `{{ ome_branch }}` of the fork)
 #
 # Differences with upstream docker-compose.yml:
-# - API and frontend come from GHCR instead of being built here.
+# - NNTP, API and frontend come from GHCR: nothing is built on the server.
 # - No source code mounted as volumes: the server runs what is in the images.
+# - INN keeps its articles, history and backlog in the volumes nntp-db and nntp-spool,
+#   so a new image (or Watchtower) keeps them.
 # - The real config.json (rendered by Ansible from the vault) is mounted as the
 #   `ome_config` secret at /run/secrets/ome_config, so no credentials are in images.
 # - FastAPI runs with `fastapi run` (production mode) on port 8000, the port
 #   the frontend's nginx proxies /api/ to.
 # - NNTP is published on the host only when the node has peers (see nntp-server).
-# - Watchtower updates the API and frontend when a new image is published.
+# - Watchtower updates NNTP, API and frontend when a new image is published.
 
 name: ome
 
 services:
   nntp-server:
     image: {{ ome_nntp_image }}
-    build:
-      context: {{ ome_src_dir }}
-      dockerfile: Dockerfile-nntp
-    pull_policy: never
+    pull_policy: missing
     hostname: nntp-server
     secrets:
       - ome_config
     restart: unless-stopped
+    # innd needs a few seconds to stop, and waits for innfeed to save the backlog.
+    stop_grace_period: 30s
+    volumes:
+      - nntp-db:/var/lib/news
+      - nntp-spool:/var/spool/news
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     networks:
       ome_net:
         ipv4_address: 172.21.0.2
@@ -51,7 +57,10 @@ services:
     labels:
       com.centurylinklabs.watchtower.enable: "true"
     depends_on:
-      - nntp-server
+      # The API connects to INN when it starts: wait until INN accepts articles.
+      nntp-server:
+        condition: service_healthy
+        restart: true
     networks:
       ome_net:
         ipv4_address: 172.21.0.3
@@ -73,15 +82,20 @@ services:
   watchtower:
     image: {{ ome_watchtower_image }}
     restart: unless-stopped
-    # --label-enable: only update containers labelled above (never NNTP or itself).
+    # --label-enable: only update containers labelled above (not Watchtower itself).
+    # --stop-timeout: as stop_grace_period of NNTP, so innd can stop cleanly.
     # --cleanup: remove the old image after an update.
-    command: ["--label-enable", "--cleanup", "--interval", "{{ ome_watchtower_interval }}"]
+    command: ["--label-enable", "--stop-timeout", "30s", "--cleanup", "--interval", "{{ ome_watchtower_interval }}"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
 secrets:
   ome_config:
-    file: {{ ome_src_dir }}/config.json
+    file: {{ ome_base_dir }}/config.json
+
+volumes:
+  nntp-db:
+  nntp-spool:
 
 networks:
   ome_net:
